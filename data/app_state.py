@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable
+from typing import Callable, Literal
 
 from utilities.array import find_index
 
@@ -38,12 +38,6 @@ class Constraint:
     symbol: ConstraintSymbol = field(default=ConstraintSymbol.LESS_THAN_OR_EQUAL)
     variables: list[Variable] = field(default_factory=list)
     value: float = 0.0
-
-    def __post_init__(self):
-        if not self.name:
-            raise ValueError("Constraint name cannot be empty.")
-        if not isinstance(self.symbol, ConstraintSymbol):
-            raise TypeError("Constraint expression must be a string.")
         
     def add_variable(self, variable: Variable):
         """Adiciona uma variável à restrição."""
@@ -120,6 +114,18 @@ class ObjectiveFunctionState:
             raise ValueError("The number of constraints must be at least 2.")
         self.quantity_of_constraints = quantity
 
+        if len(self.constraints) > quantity:
+            self.constraints = self.constraints[:quantity]
+        elif len(self.constraints) < quantity:
+            self.constraints.append(
+                Constraint(
+                    name=f"Constraint {len(self.constraints) + 1}",
+                    symbol=ConstraintSymbol.LESS_THAN_OR_EQUAL,
+                    variables=[Variable(name=f"x{i+1}") for i in range(self.quantity_of_variables)],
+                    value=0.0,
+                )
+            )
+
     def set_objective_function(self, objective_function: ObjectiveFunctionType):
         """Define a função objetivo."""
         if not isinstance(objective_function, ObjectiveFunctionType):
@@ -191,7 +197,7 @@ class AppState:
     objective_function: ObjectiveFunctionState = field(default_factory=ObjectiveFunctionState)
     is_solving: bool = False
 
-    _listeners: list[Callable] = field(default_factory=list)
+    _listeners: dict[Literal["objective_function", "constraint"], list[Callable]] = field(default_factory=dict)
 
     def reset(self):
         """Reseta todo o estado da aplicação."""
@@ -203,27 +209,25 @@ class AppState:
 
     def set_quantity_of_variables(self, quantity: int):
         self.objective_function.set_quantity_of_variables(quantity)
-        self._notify_listeners()
+        self._notify_listeners("objective_function")
 
     def set_quantity_of_constraints(self, quantity: int):
         self.objective_function.set_quantity_of_constraints(quantity)
+        self._notify_listeners("constraint")
 
     def set_objective_function(self, objective_function: ObjectiveFunctionType):
         self.objective_function.set_objective_function(objective_function)
 
-    def subscribe(self, listener: Callable):
+    def subscribe(self, listener: Callable, type: Literal["objective_function", "constraint"] = "objective_function"):
         """Adiciona um ouvinte para mudanças no estado."""
-        if listener not in self._listeners:
-            self._listeners.append(listener)
+        if type not in self._listeners:
+            self._listeners[type] = []
 
-    def unsubscribe(self, listener: Callable):
-        """Remove um ouvinte."""
-        if listener in self._listeners:
-            self._listeners.remove(listener)
+        self._listeners[type].append(listener)
 
-    def _notify_listeners(self):
+    def _notify_listeners(self, _type: Literal["objective_function", "constraint"] = "objective_function"):
         """Notifica todos os ouvintes sobre mudanças no estado."""
-        for listener in self._listeners:
+        for listener in self._listeners.get(_type, []):
             listener()
 
     def notify_all(self):

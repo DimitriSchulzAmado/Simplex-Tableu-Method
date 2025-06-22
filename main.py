@@ -78,13 +78,36 @@ def main(page: ft.Page):
         ConstraintValues(
             page, 
             constraint,
-            on_change_value=on_constraint_value_change,
-            on_change_variable=on_constraint_variable_change,
-            on_change_symbol=on_constraint_symbol_change,
+            on_change_variable_value=on_constraint_variable_change,
+            on_change_constraint_value=on_constraint_value_change,
+            on_change_constraint_symbol=on_constraint_symbol_change,
         ) for constraint in app_state.objective_function.constraints
     ]
 
-    app_state.subscribe(update_objective_function_items)
+    constraint_items_column = ft.Column(
+        controls=constraint_items,
+        spacing=8,         # espaço horizontal entre controles
+    )
+
+    def update_constraint_items():
+        """Atualiza os itens de restrição com base no estado atual."""
+        nonlocal constraint_items
+        constraint_items = [
+            ConstraintValues(
+                page, 
+                constraint,
+                on_change_variable_value=on_constraint_variable_change,
+                on_change_constraint_value=on_constraint_value_change,
+                on_change_constraint_symbol=on_constraint_symbol_change,
+            ) for constraint in app_state.objective_function.constraints
+        ]
+
+        constraint_items_column.controls = constraint_items
+        constraint_items_column.update()
+        page.update()
+
+    app_state.subscribe(update_objective_function_items, "objective_function")
+    app_state.subscribe(update_constraint_items, "constraint")
 
     page.add(
         ft.Container(
@@ -273,7 +296,7 @@ def main(page: ft.Page):
                                         ],
                                     ),
                                 ),
-                                *constraint_items,
+                                constraint_items_column,
                                 ft.Container(
                                     ft.Column(
                                         controls=[
@@ -291,7 +314,7 @@ def main(page: ft.Page):
                                                         color=ft.Colors.WHITE,
                                                     ),
                                                 ),
-                                                on_click=lambda _: print("Resolver o problema", app_state.objective_function.variables),
+                                                on_click=lambda _: print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints),
                                             ),
                                         ],
                                         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
