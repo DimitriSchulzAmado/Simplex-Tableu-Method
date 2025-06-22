@@ -103,10 +103,37 @@ class ObjectiveFunctionState:
             raise ValueError("The number of variables must be at least 2.")
         self.quantity_of_variables = quantity
 
+        has_decreased = len(self.variables) > quantity
         if len(self.variables) > quantity:
             self.variables = self.variables[:quantity]
         elif len(self.variables) < quantity:
             self.variables.append(Variable(name=f"x{len(self.variables) + 1}"))  # Add a new variable
+
+        _constraints: list[Constraint] = []
+        for constraint in self.constraints:
+            new_variables = [
+                Variable(name=v.name, value=v.value)
+                for v in constraint.variables
+            ]
+
+            if has_decreased:
+                # Remove variables that are no longer in the new quantity
+                new_variables = new_variables[:self.quantity_of_variables]
+            else:
+                new_variables.append(
+                    Variable(name=f"x{len(new_variables) + 1}", value=0.0)
+                )
+
+            _constraints.append(
+                Constraint(
+                    name=constraint.name,
+                    symbol=constraint.symbol,
+                    variables=new_variables,
+                    value=constraint.value,
+                )
+            )
+
+        self.constraints = _constraints
 
     def set_quantity_of_constraints(self, quantity: int):
         """Define o número de restrições."""
@@ -210,6 +237,7 @@ class AppState:
     def set_quantity_of_variables(self, quantity: int):
         self.objective_function.set_quantity_of_variables(quantity)
         self._notify_listeners("objective_function")
+        self._notify_listeners("constraint")
 
     def set_quantity_of_constraints(self, quantity: int):
         self.objective_function.set_quantity_of_constraints(quantity)
