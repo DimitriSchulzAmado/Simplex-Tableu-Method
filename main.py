@@ -6,6 +6,7 @@ from components.variables_controls import VariablesControls
 from components.constraint_values import ConstraintValues
 
 from data.app_state import app_state, ObjectiveFunctionType, Variable, ConstraintSymbol
+from methods.simplex_tableu import SimplexTableau
 
 
 def on_variable_change(value: float, name: str):
@@ -32,7 +33,7 @@ def on_constraint_value_change(value: float, constraint_name: str):
 
 
 def main(page: ft.Page):
-    # page.window.always_on_top = True
+    page.window.always_on_top = True
     page.title = "Simplex Solver"
 
     # page.window.opacity = .9
@@ -108,6 +109,16 @@ def main(page: ft.Page):
 
     app_state.subscribe(update_objective_function_items, "objective_function")
     app_state.subscribe(update_constraint_items, "constraint")
+
+    simplex_tableau = SimplexTableau()
+
+    def on_solve_click(e):
+        """Callback para resolver o problema quando o botão é clicado."""
+        # Aqui você pode chamar a lógica de resolução do problema
+        print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints)
+        simplex_tableau.build(app_state.objective_function)
+
+        print("Solução do problema:", simplex_tableau.solve())
 
     page.add(
         ft.Container(
@@ -314,7 +325,7 @@ def main(page: ft.Page):
                                                         color=ft.Colors.WHITE,
                                                     ),
                                                 ),
-                                                on_click=lambda _: print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints),
+                                                on_click=on_solve_click,
                                             ),
                                         ],
                                         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
