@@ -1,4 +1,5 @@
 import flet as ft
+import asyncio  # Modificação: import para usar asyncio.sleep no callback de loading
 
 from components.header import Header
 from components.value_box import ValueBox
@@ -112,13 +113,69 @@ def main(page: ft.Page):
 
     simplex_tableau = SimplexTableau()
 
-    def on_solve_click(e):
+    # Modificação: Criação do container global de resultados para atualização dinâmica
+    result_container = ft.Column(
+        controls=[
+            ft.Text(
+                "Os resultados aparecerão aqui após resolver o problema.",
+                theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                color=ft.Colors.GREY_700,
+                size=16,
+            ),
+            ft.Container(
+                padding=ft.padding.symmetric(horizontal=20, vertical=128),
+                content=ft.Column(
+                    controls=[
+                        ft.Icon(
+                            name=ft.Icons.WORKSPACES,
+                            color=ft.Colors.GREY_300,
+                            size=44,
+                        ),
+                        ft.Text(
+                            "Configure o problema e clique em \"Resolver\"",
+                            theme_style=ft.TextThemeStyle.BODY_LARGE,
+                            color=ft.Colors.GREY_400,
+                            size=14,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                ),
+            )
+        ]
+    )
+
+    async def on_solve_click(e):
         """Callback para resolver o problema quando o botão é clicado."""
+        # Modificação: exibe animação de loading
+        result_container.controls = [
+            ft.Row(
+                alignment=ft.MainAxisAlignment.CENTER,
+                controls=[
+                    ft.ProgressRing(color=ft.Colors.BLUE_700),
+                    ft.Text("Resolvendo o problema...", size=16, color=ft.Colors.GREY_800),
+                ],
+            )
+        ]
+        result_container.update()
+        await asyncio.sleep(0.1)  # Modificação: pausa para renderizar o loading
+
         # Aqui você pode chamar a lógica de resolução do problema
         print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints)
         simplex_tableau.build(app_state.objective_function)
+        simplex_tableau.solve()
+        solution = simplex_tableau.get_solution()
 
-        print("Solução do problema:", simplex_tableau.solve())
+        # Modificação: atualiza container com resultados
+        result_controls = [
+            ft.Text(f"Status: {solution['status']}", weight=ft.FontWeight.BOLD, size=18),
+            ft.Text(f"Valor ótimo da função objetivo: {solution['objective_value']:.2f}", size=16),
+            ft.Text("Valores das variáveis:", size=16, weight=ft.FontWeight.BOLD),
+        ] + [
+            ft.Text(f"{name} = {value:.2f}", size=15) for name, value in solution["variables"].items()
+        ]
+        result_container.controls = result_controls
+        result_container.update()
 
     page.add(
         ft.Container(
@@ -325,7 +382,7 @@ def main(page: ft.Page):
                                                         color=ft.Colors.WHITE,
                                                     ),
                                                 ),
-                                                on_click=on_solve_click,
+                                                on_click=on_solve_click,  # Modificação: usa callback async com loading
                                             ),
                                         ],
                                         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -337,61 +394,8 @@ def main(page: ft.Page):
                         border_radius=ft.border_radius.all(4),
                         padding=ft.padding.symmetric(horizontal=20, vertical=30),
                     ),
-                    ft.Container(
-                        ft.Column(
-                            controls=[
-                                ft.Container(
-                                    ft.Row(
-                                        controls=[
-                                            ft.Icon(
-                                                name=ft.Icons.ANALYTICS_ROUNDED,
-                                                color=ft.Colors.BLUE,
-                                                tooltip="Os resultados mostram a solução ótima do problema e as variáveis de decisão.",
-                                                size=32,
-                                            ),
-                                            ft.Text(
-                                                "Resultados",
-                                                theme_style=ft.TextThemeStyle.TITLE_LARGE,
-                                                weight=ft.FontWeight.BOLD,
-                                                color=ft.Colors.BLACK,
-                                            ),
-                                        ],
-                                    ),
-                                ),
-                                ft.Text(
-                                    "Os resultados aparecerão aqui após resolver o problema.",
-                                    theme_style=ft.TextThemeStyle.BODY_MEDIUM,
-                                    color=ft.Colors.GREY_700,
-                                    size=16,
-                                ),
-                                ft.Container(
-                                    padding=ft.padding.symmetric(horizontal=20, vertical=128),
-                                    content=ft.Column(
-                                        controls=[
-                                            ft.Icon(
-                                                name=ft.Icons.WORKSPACES,
-                                                color=ft.Colors.GREY_300,
-                                                size=44,
-                                            ),
-                                            ft.Text(
-                                                "Configure o problema e clique em \"Resolver\"",
-                                                theme_style=ft.TextThemeStyle.BODY_LARGE,
-                                                color=ft.Colors.GREY_400,
-                                                size=14,
-                                                text_align=ft.TextAlign.CENTER,
-                                            ),
-                                        ],
-                                        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                                    ),
-                                ),
-                            ],
-                        ),
-                        padding=ft.padding.symmetric(horizontal=20, vertical=30),
-                        bgcolor=ft.Colors.WHITE,
-                        border_radius=ft.border_radius.all(4),
-                        margin=ft.margin.only(top=20),
-                        expand=True,
-                    ),
+                    # Modificação: substitui container estático de resultados pelo result_container dinâmico
+                    result_container
                 ]
             )
         )
