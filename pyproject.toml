@@ -1,0 +1,13 @@
+[project]
+name = "simplex-tableu-method"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flet[all]>=0.28.3",
+    "numpy>=2.3.1",
+    "pandas>=2.3.0",
+    "pillow>=11.2.1",
+    "pulp>=3.2.1",
+]
