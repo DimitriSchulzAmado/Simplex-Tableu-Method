@@ -113,6 +113,28 @@ def main(page: ft.Page):
 
     simplex_tableau = SimplexTableau()
 
+    # ALTERAÇÃO: CRIAÇÃO DO PLACEHOLDER DINÂMICO PARA RESULTADOS
+    results_placeholder = ft.Container(
+        padding=ft.padding.symmetric(horizontal=20, vertical=64),
+        content=ft.Column(
+            controls=[
+                ft.Icon(
+                    name=ft.Icons.WORKSPACES,
+                    color=ft.Colors.GREY_300,
+                    size=44,
+                ),
+                ft.Text(
+                    "Configure o problema e clique em \"Resolver\"",
+                    theme_style=ft.TextThemeStyle.BODY_LARGE,
+                    color=ft.Colors.GREY_400,
+                    size=14,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        ),
+    )
+
     # Modificação: Criação do container global de resultados para atualização dinâmica
     # Modificação: Container global de resultados com estilização desejada e placeholder dinâmico
     result_container = ft.Container(
@@ -144,27 +166,8 @@ def main(page: ft.Page):
                     color=ft.Colors.GREY_700,
                     size=16,
                 ),
-                # Placeholder dinâmico (será substituído após o solve)
-                ft.Container(
-                    padding=ft.padding.symmetric(horizontal=20, vertical=128),
-                    content=ft.Column(
-                        controls=[
-                            ft.Icon(
-                                name=ft.Icons.WORKSPACES,
-                                color=ft.Colors.GREY_300,
-                                size=44,
-                            ),
-                            ft.Text(
-                                "Configure o problema e clique em \"Resolver\"",
-                                theme_style=ft.TextThemeStyle.BODY_LARGE,
-                                color=ft.Colors.GREY_400,
-                                size=14,
-                                text_align=ft.TextAlign.CENTER,
-                            ),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                    ),
-                ),
+                # ALTERAÇÃO: USA PLACEHOLDER DINÂMICO EM VEZ DO CONTAINER ESTÁTICO
+                results_placeholder,
             ]
         ),
         padding=ft.padding.symmetric(horizontal=20, vertical=30),
@@ -177,8 +180,8 @@ def main(page: ft.Page):
 
     async def on_solve_click(e):
         """Callback para resolver o problema quando o botão é clicado."""
-        # Modificação: exibe animação de loading
-        result_container.controls = [
+        # ALTERAÇÃO: EXIBE ANIMAÇÃO DE LOADING NO PLACEHOLDER
+        results_placeholder.content.controls = [
             ft.Row(
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
@@ -197,15 +200,83 @@ def main(page: ft.Page):
         solution = simplex_tableau.get_solution()
 
         # Modificação: atualiza container com resultados
-        result_controls = [
-            ft.Text(f"Status: {solution['status']}", weight=ft.FontWeight.BOLD, size=18),
-            ft.Text(f"Valor ótimo da função objetivo: {solution['objective_value']:.2f}", size=16),
-            ft.Text("Valores das variáveis:", size=16, weight=ft.FontWeight.BOLD),
-        ] + [
-            ft.Text(f"{name} = {value:.2f}", size=15) for name, value in solution["variables"].items()
+        # 1) Cards de status e valor ótimo com tons de verde claro
+        cards = ft.Row(
+            spacing=20,
+            controls=[
+                ft.Card(
+                    content=ft.Container(
+                        padding=ft.padding.all(16),
+                        bgcolor=ft.Colors.GREEN_100,              # FUNDO VERDE CLARO
+                        border_radius=ft.border_radius.all(8),
+                        content=ft.Column(
+                            [
+                                ft.Text("Status", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_900),
+                                ft.Text(solution["status"], color=ft.Colors.GREEN_800, size=20),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                    ),
+                    elevation=2,
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                ),
+                ft.Card(
+                    content=ft.Container(
+                        padding=ft.padding.all(16),
+                        bgcolor=ft.Colors.GREEN_100,
+                        border_radius=ft.border_radius.all(8),
+                        content=ft.Column(
+                            [
+                                ft.Text("Valor Ótimo", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_900),
+                                ft.Text(f"{solution['objective_value']:.2f}", color=ft.Colors.GREEN_800, size=20),
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                    ),
+                    elevation=2,
+                    shape=ft.RoundedRectangleBorder(radius=8),
+                ),
+            ]
+        )
+
+        # 2) Tabela de variáveis com alto contraste e tons de verde
+        table = ft.DataTable(
+            columns=[
+                ft.DataColumn(label=ft.Text("Variável", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_900)),
+                ft.DataColumn(label=ft.Text("Valor",     weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_900)),
+            ],
+            rows=[
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(name, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD)),
+                    ft.DataCell(ft.Text(f"{value:.2f}", color=ft.Colors.GREEN_800, weight=ft.FontWeight.BOLD)),
+                ])
+                for name, value in solution["variables"].items()
+            ],
+            border=ft.border.all(1, ft.Colors.GREEN_300),                   # BORDA VERDE
+            heading_row_color=ft.Colors.GREEN_200,                          # FUNDO DO CABEÇALHO
+            data_row_color=lambda i: (ft.Colors.WHITE if i % 2 == 0 else ft.Colors.GREEN_50),
+        )
+
+        # 3) Divider em verde suave
+        divider = ft.Divider(thickness=1, color=ft.Colors.GREEN_300)
+
+        # 4) Título da seção em verde escuro
+        section_title = ft.Text(
+            "Valores das Variáveis:",
+            weight=ft.FontWeight.BOLD,
+            size=16,
+            color=ft.Colors.GREEN_900,
+        )
+
+        # 5) Atualiza o placeholder
+        results_placeholder.content.controls = [
+            cards,
+            divider,
+            section_title,
+            table,
         ]
-        result_container.controls = result_controls
         result_container.update()
+
 
     page.add(
         ft.Container(
