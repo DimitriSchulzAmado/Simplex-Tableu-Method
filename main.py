@@ -114,36 +114,66 @@ def main(page: ft.Page):
     simplex_tableau = SimplexTableau()
 
     # Modificação: Criação do container global de resultados para atualização dinâmica
-    result_container = ft.Column(
-        controls=[
-            ft.Text(
-                "Os resultados aparecerão aqui após resolver o problema.",
-                theme_style=ft.TextThemeStyle.BODY_MEDIUM,
-                color=ft.Colors.GREY_700,
-                size=16,
-            ),
-            ft.Container(
-                padding=ft.padding.symmetric(horizontal=20, vertical=128),
-                content=ft.Column(
-                    controls=[
-                        ft.Icon(
-                            name=ft.Icons.WORKSPACES,
-                            color=ft.Colors.GREY_300,
-                            size=44,
-                        ),
-                        ft.Text(
-                            "Configure o problema e clique em \"Resolver\"",
-                            theme_style=ft.TextThemeStyle.BODY_LARGE,
-                            color=ft.Colors.GREY_400,
-                            size=14,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    # Modificação: Container global de resultados com estilização desejada e placeholder dinâmico
+    result_container = ft.Container(
+        content=ft.Column(
+            controls=[
+                # Cabeçalho "Resultados"
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(
+                                name=ft.Icons.ANALYTICS_ROUNDED,
+                                color=ft.Colors.BLUE,
+                                tooltip="Os resultados mostram a solução ótima do problema e as variáveis de decisão.",
+                                size=32,
+                            ),
+                            ft.Text(
+                                "Resultados",
+                                theme_style=ft.TextThemeStyle.TITLE_LARGE,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.BLACK,
+                            ),
+                        ],
+                    ),
                 ),
-            )
-        ]
+                # Texto descritivo
+                ft.Text(
+                    "Os resultados aparecerão aqui após resolver o problema.",
+                    theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                    color=ft.Colors.GREY_700,
+                    size=16,
+                ),
+                # Placeholder dinâmico (será substituído após o solve)
+                ft.Container(
+                    padding=ft.padding.symmetric(horizontal=20, vertical=128),
+                    content=ft.Column(
+                        controls=[
+                            ft.Icon(
+                                name=ft.Icons.WORKSPACES,
+                                color=ft.Colors.GREY_300,
+                                size=44,
+                            ),
+                            ft.Text(
+                                "Configure o problema e clique em \"Resolver\"",
+                                theme_style=ft.TextThemeStyle.BODY_LARGE,
+                                color=ft.Colors.GREY_400,
+                                size=14,
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                    ),
+                ),
+            ]
+        ),
+        padding=ft.padding.symmetric(horizontal=20, vertical=30),
+        bgcolor=ft.Colors.WHITE,
+        border_radius=ft.border_radius.all(4),
+        margin=ft.margin.only(top=20),
+        expand=True,
     )
+
 
     async def on_solve_click(e):
         """Callback para resolver o problema quando o botão é clicado."""
