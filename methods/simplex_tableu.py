@@ -58,13 +58,14 @@ class SimplexTableau:
         return plp.LpStatus[self._model.status]
 
     def get_solution(self):
-        # Return the solution of the linear programming problem
-        pass
+        return {
+            "status": plp.LpStatus[self._model.status],
+            "objective_value": plp.value(self._model.objective),
+            "variables": {v.name: v.varValue for v in self._model.variables()}
+        }
 
     def get_objective_value(self):
-        # Return the value of the objective function at the solution
-        pass
+        return plp.value(self._model.objective)
 
     def is_optimal(self):
-        # Check if the current tableau is optimal
-        pass
+        return plp.LpStatus[self._model.status] == "Optimal"
