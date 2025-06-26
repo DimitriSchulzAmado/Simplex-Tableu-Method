@@ -284,17 +284,12 @@ def main(page: ft.Page):
         if detailed_shadow_analysis:
             # Criando tabela detalhada com informações de variação
             detailed_shadow_rows = []
+            constraint_index = 0
             for constraint_name, analysis in detailed_shadow_analysis.items():
-                # Usando o nome da restrição original do estado da aplicação
-                original_constraint_index = None
-                for i, constraint in enumerate(app_state.objective_function.constraints):
-                    if i < len(detailed_shadow_analysis):
-                        original_constraint_index = i
-                        break
-                
-                display_name = (app_state.objective_function.constraints[original_constraint_index].name 
-                              if original_constraint_index is not None and original_constraint_index < len(app_state.objective_function.constraints)
-                              else constraint_name)
+                if constraint_index < len(app_state.objective_function.constraints):
+                    display_name = app_state.objective_function.constraints[constraint_index].name
+                else:
+                    display_name = constraint_name
                 
                 # Formatação segura para evitar erros com valores None e melhorar precisão
                 shadow_price = analysis.get('shadow_price', 0) or 0
@@ -304,7 +299,6 @@ def main(page: ft.Page):
                 valid_range_min = analysis.get('valid_range_min', 0) or 0
                 valid_range_max = analysis.get('valid_range_max', 0) or 0
                 
-                # Tratar valores muito pequenos como zero para melhor apresentação
                 if abs(shadow_price) < 1e-6:
                     shadow_price = 0.0
                 
@@ -319,7 +313,8 @@ def main(page: ft.Page):
                                           color=ft.Colors.ORANGE_700, size=12)),
                     ])
                 )
-            
+                constraint_index += 1
+                
             results_placeholder.content.controls.extend([
                 ft.Divider(thickness=1, color=ft.Colors.BLUE_300),
                 ft.Container(
@@ -367,8 +362,7 @@ def main(page: ft.Page):
                 ),
             ])
 
-        # ADIÇÃO: Controles para análise de mudança de disponibilidade
-        # Checkbox para perguntar se há alteração na disponibilidade
+        # Controles para análise de mudança de disponibilidade
         availability_change_checkbox = ft.Checkbox(
             label="Alterar Disponibilidade de Recursos?",
             value=False,
@@ -383,21 +377,21 @@ def main(page: ft.Page):
         availability_analysis_container = ft.Container(
             visible=False,
             content=ft.Column(
-                controls=[
-                    ft.Text(
-                        "Novos Valores de Disponibilidade (Lado Direito):",
-                        theme_style=ft.TextThemeStyle.BODY_LARGE,
-                        size=16,
-                        color=ft.Colors.PURPLE_900,
-                        weight=ft.FontWeight.BOLD,
-                    ),
-                    ft.Text(
-                        "Altere os valores do lado direito das restrições:",
-                        theme_style=ft.TextThemeStyle.BODY_MEDIUM,
-                        color=ft.Colors.GREY_700,
-                        size=14,
-                    ),
-                ]
+            controls=[
+                ft.Text(
+                "Novos Valores de Disponibilidade (Lado Direito):",
+                theme_style=ft.TextThemeStyle.BODY_LARGE,
+                size=16,
+                color=ft.Colors.PURPLE_900,
+                weight=ft.FontWeight.BOLD,
+                ),
+                ft.Text(
+                "Altere os valores do lado direito das restrições:",
+                theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                color=ft.Colors.GREY_700,
+                size=14,
+                ),
+            ]
             ),
             padding=ft.padding.symmetric(horizontal=20, vertical=16),
             bgcolor=ft.Colors.PURPLE_50,
@@ -735,7 +729,7 @@ def main(page: ft.Page):
                         height=50,
                         border_color=ft.Colors.PURPLE_300,
                         focused_border_color=ft.Colors.PURPLE_700,
-                        text_style=ft.TextStyle(size=14),
+                        text_style=ft.TextStyle(size=14, color=ft.Colors.BLACK),
                         label_style=ft.TextStyle(color=ft.Colors.PURPLE_800),
                     )
                     field.constraint_index = i  # Adicionar índice para identificação
