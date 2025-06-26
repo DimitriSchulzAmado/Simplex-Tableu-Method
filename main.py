@@ -8,11 +8,13 @@ from components.constraint_values import ConstraintValues
 
 from data.app_state import app_state, ObjectiveFunctionType, Variable, ConstraintSymbol
 from methods.simplex_tableu import SimplexTableau
+import copy
 
 
 def on_variable_change(value: float, name: str):
     """Callback para atualizar o valor de uma variável."""
     app_state.objective_function.update_variable(name, value)
+
 
 def on_constraint_variable_change(value: float, name: str, constraint_name: str):
     """Callback para atualizar o valor de uma variável de restrição."""
@@ -20,11 +22,13 @@ def on_constraint_variable_change(value: float, name: str, constraint_name: str)
         constraint_name, Variable(name=name, value=value)
     )
 
+
 def on_constraint_symbol_change(symbol: ConstraintSymbol, constraint_name: str):
     """Callback para atualizar o símbolo de uma restrição."""
     app_state.objective_function.update_contraint_symbol(
         constraint_name, symbol
     )
+
 
 def on_constraint_value_change(value: float, constraint_name: str):
     """Callback para atualizar o valor de uma restrição."""
@@ -275,6 +279,90 @@ def main(page: ft.Page):
             section_title,
             table,
         ]
+
+        # Adicionando Shadow prices
+        shadow_prices = simplex_tableau.get_shadow_prices()
+        if shadow_prices:
+            shadow_price_rows = []
+            for i, (name, value) in enumerate(shadow_prices.items()):
+                # Usando o nome da restrição original
+                constraint_name = app_state.objective_function.constraints[i].name if i < len(app_state.objective_function.constraints) else name
+                shadow_price_rows.append(
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text(constraint_name, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"{value:.2f}", color=ft.Colors.BLUE_800, weight=ft.FontWeight.BOLD)),
+                    ])
+                )
+            results_placeholder.content.controls.extend([
+                ft.Divider(thickness=1, color=ft.Colors.BLUE_300),
+                ft.Text(
+                    "Preços-Sombra (Valores Duais):",
+                    weight=ft.FontWeight.BOLD,
+                    size=16,
+                    color=ft.Colors.BLUE_900,
+                ),
+                ft.DataTable(
+                    columns=[
+                        ft.DataColumn(label=ft.Text("Restrição", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                        ft.DataColumn(label=ft.Text("Preço-Sombra", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                    ],
+                    rows=shadow_price_rows,
+                    border=ft.border.all(1, ft.Colors.BLUE_300),
+                    heading_row_color=ft.Colors.BLUE_200,
+                    data_row_color=lambda i: (ft.Colors.WHITE if i % 2 == 0 else ft.Colors.BLUE_50),
+                ),
+            ])
+
+        # Adicionando Análise de Viabilidade (Exemplo - precisa de input do usuário para alterações)
+        # Para demonstrar, vamos simular uma alteração na primeira variável do problema
+        # Em um cenário real, o usuário precisaria fornecer os dados da alteração
+        # Para este exemplo, vamos criar um problema alterado para demonstração
+        # ATENÇÃO: Esta parte é um placeholder. A funcionalidade completa de análise de viabilidade
+        # requer uma interface para o usuário inserir as alterações desejadas.
+        
+        # Criando uma cópia do problema original para simular uma alteração
+        # Cria uma cópia profunda do problema para simular alterações
+        changed_problem = copy.deepcopy(app_state.objective_function)
+        # Exemplo de alteração: aumentar o coeficiente da primeira variável em 10%
+        if changed_problem.variables:
+            print(changed_problem.variables[0].value)
+            changed_problem.variables[0] = type(changed_problem.variables[0])(
+                name=changed_problem.variables[0].name,
+                value=changed_problem.variables[0].value * 1.1
+            )
+
+        viability_analysis = simplex_tableau.analyze_change_viability(changed_problem)
+
+        viability_color = ft.Colors.GREEN_800 if viability_analysis["is_viable"] else ft.Colors.RED_800
+        viability_text = "Viável" if viability_analysis["is_viable"] else "Não Viável"
+
+        results_placeholder.content.controls.extend([
+            ft.Divider(thickness=1, color=ft.Colors.ORANGE_300),
+            ft.Text(
+                "Análise de Viabilidade de Alterações (Exemplo):",
+                weight=ft.FontWeight.BOLD,
+                size=16,
+                color=ft.Colors.ORANGE_900,
+            ),
+            ft.Text(
+                f"Alteração Proposta: Aumento de 10% no coeficiente da primeira variável.",
+                color=ft.Colors.ORANGE_700,
+            ),
+            ft.Text(
+                f"Viabilidade da Alteração: {viability_text}",
+                color=viability_color,
+                weight=ft.FontWeight.BOLD,
+            ),
+            ft.Text(
+                f"Novo Lucro Ótimo (se viável): {viability_analysis['new_optimal_profit']:.2f}",
+                color=ft.Colors.ORANGE_700,
+            ),
+            ft.Text(
+                f"Limite de Validade do Preço-Sombra: {viability_analysis['shadow_price_validity_limits']['note']}",
+                color=ft.Colors.ORANGE_700,
+            ),
+        ])
+
         result_container.update()
 
 
