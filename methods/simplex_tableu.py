@@ -81,6 +81,37 @@ class SimplexTableau:
             shadow_prices[name] = constraint.pi
         return shadow_prices
 
+    def get_detailed_shadow_price_analysis(self):
+        """
+        Get detailed shadow price analysis.
+        
+        :return: A dictionary with detailed analysis for each constraint.
+        """
+        try:
+            constraint_names = list(self._model.constraints.keys())
+            analysis_results = {}
+            
+            for i, name in enumerate(constraint_names):
+                constraint = self._model.constraints[name]
+                original_rhs = -constraint.constant if constraint.constant is not None else 0
+                shadow_price_raw = constraint.pi if constraint.pi is not None else 0
+                
+                if abs(shadow_price_raw) < 1e-6:
+                    shadow_price = 0.0
+                else:
+                    shadow_price = shadow_price_raw
+                
+                analysis_results[name] = {
+                    "constraint_name": name,
+                    "original_rhs": original_rhs,
+                    "shadow_price": shadow_price
+                }
+            
+            return analysis_results
+        except Exception as e:
+            print(f"Erro na análise de preços-sombra: {e}")
+            return {}
+
     def get_reduced_costs(self):
         """
         Get the reduced costs for each variable.
@@ -123,4 +154,97 @@ class SimplexTableau:
             "shadow_price_validity_limits": shadow_price_validity_limits
         }
 
-
+    def analyze_resource_availability_change(self, new_constraint_values: list[float]):
+        """
+        Analyze the viability of changes in resource availability (RHS values).
+        
+        :param new_constraint_values: List of new constraint values in the same order as the original constraints.
+        :return: Dictionary containing viability status and new optimal value.
+        """
+        # Store original constraint values
+        original_constraints = []
+        constraint_names = list(self._model.constraints.keys())
+        
+        # Store original RHS values
+        for name in constraint_names:
+            original_constraints.append(self._model.constraints[name].constant)
+        
+        # Get original objective value BEFORE making any changes
+        original_objective = plp.value(self._model.objective)
+        
+        try:
+            # Update constraint values
+            for i, name in enumerate(constraint_names):
+                if i < len(new_constraint_values):
+                    # Update the constraint's RHS value
+                    constraint = self._model.constraints[name]
+                    # For PuLP, we need to modify the constraint expression
+                    constraint.constant = -new_constraint_values[i]
+            
+            # Solve with new values
+            solve_status = self._model.solve()
+            
+            # Check if the problem has a feasible solution
+            has_feasible_solution = solve_status == plp.LpStatusOptimal
+            
+            if has_feasible_solution:
+                new_objective = plp.value(self._model.objective)
+                
+                # NOVA LÓGICA DE VIABILIDADE:
+                # Viável = Novo Lucro > Lucro Original
+                is_viable = new_objective > original_objective
+                
+                profit_difference = new_objective - original_objective
+                
+                result = {
+                    "is_viable": is_viable,
+                    "new_optimal_value": new_objective,
+                    "original_optimal_value": original_objective,
+                    "profit_difference": profit_difference,
+                    "has_feasible_solution": True,
+                    "status": f"Feasible - {'Viável' if is_viable else 'Inviável'} "
+                            f"(Δ = {profit_difference:+.2f})",
+                    "viability_reason": (
+                        f"Novo lucro ({new_objective:.2f}) > "
+                        f"Lucro original ({original_objective:.2f})"
+                        if is_viable else
+                        f"Novo lucro ({new_objective:.2f}) ≤ "
+                        f"Lucro original ({original_objective:.2f})"
+                    )
+                }
+            else:
+                # Problem became infeasible or unbounded
+                result = {
+                    "is_viable": False,
+                    "new_optimal_value": None,
+                    "original_optimal_value": original_objective,
+                    "profit_difference": None,
+                    "has_feasible_solution": False,
+                    "status": f"Infeasible - {plp.LpStatus[self._model.status]}",
+                    "viability_reason": (
+                        "Problema se tornou inviável com os novos valores de recursos"
+                    )
+                }
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "is_viable": False,
+                "new_optimal_value": None,
+                "original_optimal_value": original_objective,
+                "profit_difference": None,
+                "has_feasible_solution": False,
+                "status": f"Error: {str(e)}",
+                "viability_reason": f"Erro durante análise: {str(e)}"
+            }
+            
+        finally:
+            # SEMPRE restaurar valores originais
+            try:
+                for i, name in enumerate(constraint_names):
+                    self._model.constraints[name].constant = original_constraints[i]
+                # Re-solve to restore original state
+                self._model.solve()
+            except Exception as restore_error:
+                print(f"Erro ao restaurar valores originais: {restore_error}")
