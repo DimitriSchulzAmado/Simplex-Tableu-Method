@@ -4,6 +4,7 @@ from components.header import Header
 from components.value_box import ValueBox
 from components.variables_controls import VariablesControls
 from components.constraint_values import ConstraintValues
+from components.result_row import ResultRow
 
 from data.app_state import app_state, ObjectiveFunctionType, Variable, ConstraintSymbol
 from methods.simplex_tableu import SimplexTableau
@@ -30,6 +31,12 @@ def on_constraint_value_change(value: float, constraint_name: str):
     app_state.objective_function.update_constraint_value(
         constraint_name, value
     )
+
+
+loading_icon_reference = ft.Ref[ft.ProgressRing]()
+results_container_placeholder_reference = ft.Ref[ft.Container]()
+results_container_reference = ft.Ref[ft.Container]()
+text_solution_reference = ft.Ref[ft.Text]()
 
 
 def main(page: ft.Page):
@@ -115,10 +122,44 @@ def main(page: ft.Page):
     def on_solve_click(e):
         """Callback para resolver o problema quando o botão é clicado."""
         # Aqui você pode chamar a lógica de resolução do problema
-        print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints)
-        simplex_tableau.build(app_state.objective_function)
+        try:
+            loading_icon_reference.current.visible = True
+            loading_icon_reference.current.update()
+            page.update()
 
-        print("Solução do problema:", simplex_tableau.solve())
+            print("Resolver o problema", app_state.objective_function.variables, app_state.objective_function.constraints)
+            simplex_tableau.build(app_state.objective_function)
+
+            simplex_tableau.solve()
+            print("Problema resolvido com sucesso!")
+
+            great_solution = simplex_tableau.get_solution()
+
+            if great_solution is None or great_solution and '__dummy' in great_solution and great_solution.get("__dummy", None) is None:
+                text_solution_reference.current.value = "Nenhuma solução ótima encontrada."
+                text_solution_reference.current.update()
+            else:
+                text: list[str] = []
+                # for variable in great_solution:
+                #     text.append(f"{variable} = {great_solution[variable]}")
+                text.append(f"{simplex_tableau.get_objective_value()}")
+
+                text_solution_reference.current.value = "\n".join(text)
+                text_solution_reference.current.update()
+
+            results_container_placeholder_reference.current.visible = False
+            results_container_placeholder_reference.current.update()
+            
+            results_container_reference.current.visible = True
+            results_container_reference.current.update()
+            
+            page.update()
+        except Exception as ex:
+            print("Erro ao resolver o problema:", ex)
+        finally:
+            loading_icon_reference.current.visible = False
+            loading_icon_reference.current.update()
+            page.update()
 
     page.add(
         ft.Container(
@@ -312,9 +353,16 @@ def main(page: ft.Page):
                                     ft.Column(
                                         controls=[
                                             ft.ElevatedButton(
-                                                text="Resolver",
+                                                content=ft.Row(
+                                                    controls=[
+                                                        ft.ProgressRing(ref=loading_icon_reference, width=20, height=20, stroke_width=3, visible=False),
+                                                        ft.Text("Resolver"),
+                                                    ],
+                                                    spacing=24,
+                                                    alignment=ft.MainAxisAlignment.CENTER,
+                                                ),
                                                 height=64,
-                                                icon=ft.Icons.EQUALIZER,
+                                                # icon=ft.Icons.EQUALIZER,
                                                 color=ft.Colors.WHITE,
                                                 bgcolor=ft.Colors.BLUE_700,
                                                 style=ft.ButtonStyle(
@@ -386,12 +434,262 @@ def main(page: ft.Page):
                                 ),
                             ],
                         ),
+                        ref=results_container_placeholder_reference,
                         padding=ft.padding.symmetric(horizontal=20, vertical=30),
                         bgcolor=ft.Colors.WHITE,
                         border_radius=ft.border_radius.all(4),
                         margin=ft.margin.only(top=20),
+                        visible=True,
                         expand=True,
                     ),
+                    ft.Container(
+                        ft.Column(
+                            controls=[
+                                ft.Container(
+                                    content=ft.Column(
+                                        controls=[
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Icon(
+                                                            name=ft.Icons.ANALYTICS_ROUNDED,
+                                                            color=ft.Colors.WHITE,
+                                                            size=40,
+                                                        ),
+                                                        ft.Text(
+                                                            "Solução Ótima",
+                                                            theme_style=ft.TextThemeStyle.TITLE_LARGE,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.WHITE,
+                                                            size=32,
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(
+                                                            "A solução ótima do problema é:",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                        ft.Text(
+                                                            "40",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                            ref=text_solution_reference,
+                                                        ),
+                                                    ],
+                                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                                    alignment=ft.MainAxisAlignment.CENTER,
+                                                ),
+                                                margin=ft.margin.symmetric(horizontal=20, vertical=24),
+                                                padding=ft.padding.symmetric(horizontal=20, vertical=20),
+                                                bgcolor=ft.Colors.GREEN_400,
+                                                border_radius=ft.border_radius.all(100),
+                                            ),
+                                            ft.Divider(
+                                                color=ft.Colors.WHITE70,
+                                                thickness=1,
+                                                height=1,
+                                            ),
+                                            ft.Text(
+                                                "As variáveis de decisão são:",
+                                                theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                                                color=ft.Colors.WHITE,
+                                                size=20,
+                                            ),
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(
+                                                            "Variável",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                        ft.Text(
+                                                            "Valor",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                    ],
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                                margin=ft.margin.only(top=10, bottom=0),
+                                                padding=ft.padding.symmetric(horizontal=20, vertical=16),
+                                                bgcolor=ft.Colors.WHITE38,
+                                                border_radius=ft.border_radius.all(8),
+                                            ),
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(
+                                                            "X₁",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                        ft.Text(
+                                                            "6.780",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                    ],
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                                margin=ft.margin.only(top=0, bottom=10),
+                                                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+                                                bgcolor=ft.Colors.WHITE12,
+                                                border_radius=ft.border_radius.all(8),
+                                            ),
+                                        ],
+                                    ),
+                                    padding=ft.padding.symmetric(horizontal=20, vertical=30),
+                                    bgcolor=ft.Colors.GREEN_300,
+                                    border_radius=ft.border_radius.all(4),
+                                    margin=ft.margin.only(top=20),
+                                ),
+                                ft.Container(
+                                    content=ft.Column(
+                                        controls=[
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Icon(
+                                                            name=ft.Icons.INFO_OUTLINE,
+                                                            color=ft.Colors.WHITE,
+                                                            size=40,
+                                                        ),
+                                                        ft.Text(
+                                                            "Analise de Sensibilidade",
+                                                            theme_style=ft.TextThemeStyle.TITLE_LARGE,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.WHITE,
+                                                            size=32,
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            ft.Text(
+                                                "Preços-sombra e análise de variações nas restrições",
+                                                theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                                                color=ft.Colors.WHITE70,
+                                                size=20,
+                                            ),
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Text(
+                                                            "Restrição",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                            width=200,
+                                                        ),
+                                                        ft.Text(
+                                                            "Preço-sombra",
+                                                            theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                            color=ft.Colors.WHITE,
+                                                        ),
+                                                    ],
+                                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                ),
+                                                margin=ft.margin.only(top=10, bottom=0),
+                                                padding=ft.padding.symmetric(horizontal=20, vertical=16),
+                                                bgcolor=ft.Colors.LIGHT_BLUE_700,
+                                                border_radius=ft.border_radius.all(8),
+                                            ),
+                                        
+                                            ResultRow(result="X₁ + 2X₂ ≤ 14"),
+                                        ],
+                                    ),
+                                    padding=ft.padding.symmetric(horizontal=20, vertical=30),
+                                    bgcolor=ft.Colors.LIGHT_BLUE_200,
+                                    border_radius=ft.border_radius.all(4),
+                                    margin=ft.margin.only(top=20),
+                                ),
+                                ft.Container(
+                                    content=ft.Column(
+                                        controls=[
+                                            ft.Container(
+                                                ft.Row(
+                                                    controls=[
+                                                        ft.Icon(
+                                                            name=ft.Icons.PRODUCTION_QUANTITY_LIMITS,
+                                                            color=ft.Colors.WHITE,
+                                                            size=40,
+                                                        ),
+                                                        ft.Text(
+                                                            "Limites de Validade dos Preços-Sombra",
+                                                            theme_style=ft.TextThemeStyle.TITLE_LARGE,
+                                                            weight=ft.FontWeight.BOLD,
+                                                            color=ft.Colors.WHITE,
+                                                            size=32,
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            ft.Container(
+                                                ft.Column(
+                                                    controls=[
+                                                        ft.Row(
+                                                            controls=[
+                                                                ft.Text(
+                                                                    "Restrição 1",
+                                                                    theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                                    color=ft.Colors.WHITE,
+                                                                    width=200,
+                                                                ),
+                                                                ft.Text(
+                                                                    "Preço-sombra: 83.32",
+                                                                    theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                                                                    color=ft.Colors.WHITE,
+                                                                ),
+                                                            ],
+                                                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                                        ),
+                                                        ft.Text(
+                                                            "O preço-sombra é válido para valores de restrição entre 0 e 14.",
+                                                            theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                                                            color=ft.Colors.WHITE70,
+                                                        ),
+
+                                                        ft.Container(
+                                                            ft.Column(
+                                                                controls=[
+                                                                    ft.Text(
+                                                                        "Limite Inferior: 0",
+                                                                        theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                                        color=ft.Colors.WHITE70,
+                                                                    ),
+                                                                    ft.Text(
+                                                                        "Limite Superior: 14",
+                                                                        theme_style=ft.TextThemeStyle.HEADLINE_SMALL,
+                                                                        color=ft.Colors.WHITE70,
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                            margin=ft.margin.only(top=20, bottom=0),
+                                                        ),
+                                                    ],
+                                                ),
+                                                margin=ft.margin.only(top=10, bottom=0),
+                                                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+                                                bgcolor=ft.Colors.LIGHT_GREEN_300,
+                                                border_radius=ft.border_radius.all(8),
+                                            )
+                                        ],
+                                    ),
+                                    padding=ft.padding.symmetric(horizontal=20, vertical=30),
+                                    bgcolor=ft.Colors.LIGHT_GREEN_200,
+                                    border_radius=ft.border_radius.all(4),
+                                    margin=ft.margin.only(top=20),
+                                ),
+                            ]
+                        ),
+                        ref=results_container_reference,
+                        visible=False,
+                        expand=True,
+                    )
                 ]
             )
         )
