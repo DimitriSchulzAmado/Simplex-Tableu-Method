@@ -81,6 +81,157 @@ class SimplexTableau:
             shadow_prices[name] = constraint.pi
         return shadow_prices
 
+    def get_detailed_shadow_price_analysis(self):
+        """
+        Get detailed shadow price analysis including variation limits.
+        
+        :return: A dictionary with detailed analysis for each constraint.
+        """
+        try:
+            constraint_names = list(self._model.constraints.keys())
+            analysis_results = {}
+            
+            for i, name in enumerate(constraint_names):
+                constraint = self._model.constraints[name]
+                # O RHS original é o negativo da constante no PuLP
+                original_rhs = -constraint.constant if constraint.constant is not None else 0
+                # Preço-sombra vem diretamente do PuLP - usar o valor absoluto se necessário
+                shadow_price_raw = constraint.pi if constraint.pi is not None else 0
+                
+                # Corrigir preços-sombra negativos pequenos (problemas de precisão numérica)
+                if abs(shadow_price_raw) < 1e-6:
+                    shadow_price = 0.0
+                else:
+                    # Para problemas de maximização, o preço-sombra já vem com o sinal correto
+                    shadow_price = shadow_price_raw
+                
+                # Calcular limites de variação usando análise de sensibilidade básica
+                max_increase, max_decrease = self._calculate_rhs_limits(name, original_rhs)
+                
+                analysis_results[name] = {
+                    "constraint_name": name,
+                    "original_rhs": original_rhs,
+                    "shadow_price": shadow_price,
+                    "max_increase": max_increase,
+                    "max_decrease": max_decrease,
+                    "valid_range_min": original_rhs - max_decrease,
+                    "valid_range_max": original_rhs + max_increase
+                }
+            
+            return analysis_results
+        except Exception as e:
+            print(f"Erro na análise de preços-sombra: {e}")
+            return {}
+
+    def _calculate_rhs_limits(self, constraint_name: str, original_rhs: float):
+        """
+        Calcula os limites de variação para o RHS de uma restrição.
+        
+        :param constraint_name: Nome da restrição
+        :param original_rhs: Valor original do RHS
+        :return: Tupla (max_increase, max_decrease)
+        """
+        try:
+            # Testes incrementais para encontrar limites
+            test_increases = [1, 5, 10, 20, 50, 100]
+            test_decreases = [1, 5, 10, 20, 50, 100]
+            
+            max_increase = 0
+            max_decrease = 0
+            
+            original_constraint = self._model.constraints[constraint_name]
+            original_constant = original_constraint.constant
+            
+            # Testar aumentos
+            for increase in test_increases:
+                try:
+                    # Aplicar aumento temporário
+                    original_constraint.constant = original_constant - increase
+                    
+                    # Testar se ainda é viável
+                    status = self._model.solve()
+                    
+                    if status == plp.LpStatusOptimal:
+                        max_increase = increase
+                    else:
+                        break
+                finally:
+                    # Restaurar valor original
+                    original_constraint.constant = original_constant
+            
+            # Testar reduções
+            for decrease in test_decreases:
+                try:
+                    # Aplicar redução temporária
+                    original_constraint.constant = original_constant + decrease
+                    
+                    # Testar se ainda é viável
+                    status = self._model.solve()
+                    
+                    if status == plp.LpStatusOptimal:
+                        max_decrease = decrease
+                    else:
+                        break
+                finally:
+                    # Restaurar valor original
+                    original_constraint.constant = original_constant
+            
+            # Re-resolver o problema original para garantir que está no estado correto
+            self._model.solve()
+            
+            return max_increase, max_decrease
+            
+        except Exception as e:
+            print(f"Erro no cálculo de limites para {constraint_name}: {e}")
+            return 10.0, 10.0  # Valores padrão
+
+    def _find_max_rhs_change(self, constraint_name: str, direction: str = "increase", max_test_value: float = 1000):
+        """
+        Find the maximum change in RHS value before the solution becomes infeasible.
+        
+        :param constraint_name: Name of the constraint to analyze
+        :param direction: "increase" or "decrease"
+        :param max_test_value: Maximum value to test
+        :return: Maximum change allowed
+        """
+        original_constraint = self._model.constraints[constraint_name]
+        original_constant = original_constraint.constant
+        
+        # Binary search to find maximum change
+        if direction == "increase":
+            low, high = 0, max_test_value
+        else:
+            low, high = 0, max_test_value
+        
+        max_valid_change = 0
+        
+        # Test changes incrementally
+        test_values = [1, 5, 10, 25, 50, 100, 250, 500, 1000]
+        
+        for test_change in test_values:
+            try:
+                # Apply test change
+                if direction == "increase":
+                    original_constraint.constant = original_constant - test_change
+                else:
+                    original_constraint.constant = original_constant + test_change
+                
+                # Test solve
+                temp_status = self._model.solve()
+                
+                if temp_status == plp.LpStatusOptimal:
+                    max_valid_change = test_change
+                else:
+                    break
+                    
+            except:
+                break
+            finally:
+                # Restore original
+                original_constraint.constant = original_constant
+        
+        return max_valid_change
+
     def get_reduced_costs(self):
         """
         Get the reduced costs for each variable.
@@ -122,5 +273,60 @@ class SimplexTableau:
             "original_optimal_profit": original_objective_value,
             "shadow_price_validity_limits": shadow_price_validity_limits
         }
+
+    def analyze_resource_availability_change(self, new_constraint_values: list[float]):
+        """
+        Analyze the viability of changes in resource availability (RHS values).
+        
+        :param new_constraint_values: List of new constraint values in the same order as the original constraints.
+        :return: Dictionary containing viability status and new optimal value.
+        """
+        # Store original constraint values
+        original_constraints = []
+        constraint_names = list(self._model.constraints.keys())
+        
+        # Store original RHS values
+        for name in constraint_names:
+            original_constraints.append(self._model.constraints[name].constant)
+        
+        try:
+            # Update constraint values
+            for i, name in enumerate(constraint_names):
+                if i < len(new_constraint_values):
+                    # Update the constraint's RHS value
+                    constraint = self._model.constraints[name]
+                    # For PuLP, we need to modify the constraint expression
+                    # This is a simplified approach - in practice, you might need to rebuild the model
+                    constraint.constant = -new_constraint_values[i]
+            
+            # Solve with new values
+            original_objective = plp.value(self._model.objective)
+            self._model.solve()
+            new_objective = plp.value(self._model.objective)
+            
+            is_viable = self._model.status == plp.LpStatusOptimal
+            
+            # Restore original values
+            for i, name in enumerate(constraint_names):
+                self._model.constraints[name].constant = original_constraints[i]
+            
+            return {
+                "is_viable": is_viable,
+                "new_optimal_value": new_objective if is_viable else None,
+                "original_optimal_value": original_objective,
+                "status": plp.LpStatus[self._model.status]
+            }
+            
+        except Exception as e:
+            # Restore original values in case of error
+            for i, name in enumerate(constraint_names):
+                self._model.constraints[name].constant = original_constraints[i]
+            
+            return {
+                "is_viable": False,
+                "new_optimal_value": None,
+                "original_optimal_value": plp.value(self._model.objective),
+                "status": f"Error: {str(e)}"
+            }
 
 

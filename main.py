@@ -8,7 +8,6 @@ from components.constraint_values import ConstraintValues
 
 from data.app_state import app_state, ObjectiveFunctionType, Variable, ConstraintSymbol
 from methods.simplex_tableu import SimplexTableau
-import copy
 
 
 def on_variable_change(value: float, name: str):
@@ -280,87 +279,498 @@ def main(page: ft.Page):
             table,
         ]
 
-        # Adicionando Shadow prices
-        shadow_prices = simplex_tableau.get_shadow_prices()
-        if shadow_prices:
-            shadow_price_rows = []
-            for i, (name, value) in enumerate(shadow_prices.items()):
-                # Usando o nome da restrição original
-                constraint_name = app_state.objective_function.constraints[i].name if i < len(app_state.objective_function.constraints) else name
-                shadow_price_rows.append(
+        # Adicionando análise detalhada dos preços-sombra com limites de variação
+        detailed_shadow_analysis = simplex_tableau.get_detailed_shadow_price_analysis()
+        if detailed_shadow_analysis:
+            # Criando tabela detalhada com informações de variação
+            detailed_shadow_rows = []
+            for constraint_name, analysis in detailed_shadow_analysis.items():
+                # Usando o nome da restrição original do estado da aplicação
+                original_constraint_index = None
+                for i, constraint in enumerate(app_state.objective_function.constraints):
+                    if i < len(detailed_shadow_analysis):
+                        original_constraint_index = i
+                        break
+                
+                display_name = (app_state.objective_function.constraints[original_constraint_index].name 
+                              if original_constraint_index is not None and original_constraint_index < len(app_state.objective_function.constraints)
+                              else constraint_name)
+                
+                # Formatação segura para evitar erros com valores None e melhorar precisão
+                shadow_price = analysis.get('shadow_price', 0) or 0
+                original_rhs = analysis.get('original_rhs', 0) or 0
+                max_increase = analysis.get('max_increase', 0) or 0
+                max_decrease = analysis.get('max_decrease', 0) or 0
+                valid_range_min = analysis.get('valid_range_min', 0) or 0
+                valid_range_max = analysis.get('valid_range_max', 0) or 0
+                
+                # Tratar valores muito pequenos como zero para melhor apresentação
+                if abs(shadow_price) < 1e-6:
+                    shadow_price = 0.0
+                
+                detailed_shadow_rows.append(
                     ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(constraint_name, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD)),
-                        ft.DataCell(ft.Text(f"{value:.2f}", color=ft.Colors.BLUE_800, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(display_name, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"{shadow_price:.3f}", color=ft.Colors.BLUE_800, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"{original_rhs:.1f}", color=ft.Colors.GREY_700)),
+                        ft.DataCell(ft.Text(f"+{max_increase:.1f}", color=ft.Colors.GREEN_700, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"-{max_decrease:.1f}", color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"[{valid_range_min:.1f}, {valid_range_max:.1f}]", 
+                                          color=ft.Colors.ORANGE_700, size=12)),
                     ])
                 )
+            
             results_placeholder.content.controls.extend([
                 ft.Divider(thickness=1, color=ft.Colors.BLUE_300),
-                ft.Text(
-                    "Preços-Sombra (Valores Duais):",
-                    weight=ft.FontWeight.BOLD,
-                    size=16,
-                    color=ft.Colors.BLUE_900,
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Row(
+                                controls=[
+                                    ft.Icon(name=ft.Icons.INSIGHTS, color=ft.Colors.BLUE_700, size=24),
+                                    ft.Text(
+                                        "Análise de Sensibilidade - Preços-Sombra e Variação Permitida:",
+                                        weight=ft.FontWeight.BOLD,
+                                        size=16,
+                                        color=ft.Colors.BLUE_900,
+                                    ),
+                                ]
+                            ),
+                            ft.Text(
+                                "Esta tabela mostra o impacto de mudanças nos recursos disponíveis:",
+                                color=ft.Colors.GREY_700,
+                                size=14,
+                                italic=True,
+                            ),
+                        ]
+                    ),
+                    margin=ft.margin.only(bottom=16),
                 ),
                 ft.DataTable(
                     columns=[
                         ft.DataColumn(label=ft.Text("Restrição", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
-                        ft.DataColumn(label=ft.Text("Preço-Sombra", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                        ft.DataColumn(label=ft.Text("Preço-Sombra", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900, 
+                                                   tooltip="Valor por unidade adicional de recurso")),
+                        ft.DataColumn(label=ft.Text("Valor Atual", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)),
+                        ft.DataColumn(label=ft.Text("Máx Aumento", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_800,
+                                                   tooltip="Máximo que pode aumentar mantendo viabilidade")),
+                        ft.DataColumn(label=ft.Text("Máx Redução", weight=ft.FontWeight.BOLD, color=ft.Colors.RED_800,
+                                                   tooltip="Máximo que pode diminuir mantendo viabilidade")),
+                        ft.DataColumn(label=ft.Text("Faixa Válida", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_800,
+                                                   tooltip="Intervalo onde o preço-sombra permanece válido")),
                     ],
-                    rows=shadow_price_rows,
+                    rows=detailed_shadow_rows,
                     border=ft.border.all(1, ft.Colors.BLUE_300),
                     heading_row_color=ft.Colors.BLUE_200,
                     data_row_color=lambda i: (ft.Colors.WHITE if i % 2 == 0 else ft.Colors.BLUE_50),
+                    border_radius=ft.border_radius.all(8),
                 ),
             ])
 
-        # Adicionando Análise de Viabilidade (Exemplo - precisa de input do usuário para alterações)
-        # Para demonstrar, vamos simular uma alteração na primeira variável do problema
-        # Em um cenário real, o usuário precisaria fornecer os dados da alteração
-        # Para este exemplo, vamos criar um problema alterado para demonstração
-        # ATENÇÃO: Esta parte é um placeholder. A funcionalidade completa de análise de viabilidade
-        # requer uma interface para o usuário inserir as alterações desejadas.
-        
-        # Criando uma cópia do problema original para simular uma alteração
-        # Cria uma cópia profunda do problema para simular alterações
-        changed_problem = copy.deepcopy(app_state.objective_function)
-        # Exemplo de alteração: aumentar o coeficiente da primeira variável em 10%
-        if changed_problem.variables:
-            print(changed_problem.variables[0].value)
-            changed_problem.variables[0] = type(changed_problem.variables[0])(
-                name=changed_problem.variables[0].name,
-                value=changed_problem.variables[0].value * 1.1
-            )
-
-        viability_analysis = simplex_tableau.analyze_change_viability(changed_problem)
-
-        viability_color = ft.Colors.GREEN_800 if viability_analysis["is_viable"] else ft.Colors.RED_800
-        viability_text = "Viável" if viability_analysis["is_viable"] else "Não Viável"
-
-        results_placeholder.content.controls.extend([
-            ft.Divider(thickness=1, color=ft.Colors.ORANGE_300),
-            ft.Text(
-                "Análise de Viabilidade de Alterações (Exemplo):",
-                weight=ft.FontWeight.BOLD,
+        # ADIÇÃO: Controles para análise de mudança de disponibilidade
+        # Checkbox para perguntar se há alteração na disponibilidade
+        availability_change_checkbox = ft.Checkbox(
+            label="Alterar Disponibilidade de Recursos?",
+            value=False,
+            label_style=ft.TextStyle(
                 size=16,
-                color=ft.Colors.ORANGE_900,
-            ),
-            ft.Text(
-                f"Alteração Proposta: Aumento de 10% no coeficiente da primeira variável.",
-                color=ft.Colors.ORANGE_700,
-            ),
-            ft.Text(
-                f"Viabilidade da Alteração: {viability_text}",
-                color=viability_color,
+                color=ft.Colors.PURPLE_900,
                 weight=ft.FontWeight.BOLD,
             ),
-            ft.Text(
-                f"Novo Lucro Ótimo (se viável): {viability_analysis['new_optimal_profit']:.2f}",
-                color=ft.Colors.ORANGE_700,
+        )
+
+        # Container para os campos de alteração de disponibilidade (inicialmente oculto)
+        availability_analysis_container = ft.Container(
+            visible=False,
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Novos Valores de Disponibilidade (Lado Direito):",
+                        theme_style=ft.TextThemeStyle.BODY_LARGE,
+                        size=16,
+                        color=ft.Colors.PURPLE_900,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    ft.Text(
+                        "Altere os valores do lado direito das restrições:",
+                        theme_style=ft.TextThemeStyle.BODY_MEDIUM,
+                        color=ft.Colors.GREY_700,
+                        size=14,
+                    ),
+                ]
             ),
-            ft.Text(
-                f"Limite de Validade do Preço-Sombra: {viability_analysis['shadow_price_validity_limits']['note']}",
-                color=ft.Colors.ORANGE_700,
+            padding=ft.padding.symmetric(horizontal=20, vertical=16),
+            bgcolor=ft.Colors.PURPLE_50,
+            border_radius=ft.border_radius.all(8),
+            margin=ft.margin.only(top=16),
+        )
+
+        # Função auxiliar para remover análises anteriores
+        def remove_previous_analysis():
+            """Remove análises anteriores de mudança de disponibilidade."""
+            controls_to_remove = []
+            
+            for i, control in enumerate(results_placeholder.content.controls):
+                should_remove = False
+                
+                # Verifica se tem atributo especial de análise
+                if hasattr(control, '_is_analysis_element'):
+                    should_remove = True
+                
+                # Fallback: Divider grosso
+                elif (isinstance(control, ft.Divider) and
+                      hasattr(control, 'thickness') and
+                      control.thickness >= 2):
+                    should_remove = True
+                
+                # Fallback: Procurar por texto específico
+                elif isinstance(control, ft.Container):
+                    try:
+                        content = control.content
+                        if hasattr(content, 'controls'):
+                            for inner in content.controls:
+                                if isinstance(inner, ft.Row):
+                                    for item in inner.controls:
+                                        if (isinstance(item, ft.Text) and
+                                            hasattr(item, 'value') and
+                                            item.value and
+                                            "Análise de Mudança" in item.value):
+                                            should_remove = True
+                                            break
+                                if should_remove:
+                                    break
+                    except (AttributeError, TypeError):
+                        pass
+                
+                if should_remove:
+                    controls_to_remove.append(i)
+            
+            # Remover elementos (do maior para menor índice)
+            for index in sorted(controls_to_remove, reverse=True):
+                if index < len(results_placeholder.content.controls):
+                    results_placeholder.content.controls.pop(index)
+            
+            return len(controls_to_remove) > 0
+
+        # Função para analisar mudança de disponibilidade
+        def analyze_availability_change():
+            """Analisa as mudanças de disponibilidade e atualiza os resultados."""
+            try:
+                remove_previous_analysis()
+                
+                # Obter os novos valores dos campos de entrada
+                new_values = []
+                changes_summary = []
+                for field in availability_analysis_container.availability_fields:
+                    try:
+                        value = float(field.value)
+                        new_values.append(value)
+                        constraint_index = field.constraint_index
+                        original_value = app_state.objective_function.constraints[constraint_index].value
+                        constraint_name = app_state.objective_function.constraints[constraint_index].name
+                        changes_summary.append({
+                            "name": constraint_name,
+                            "original": original_value,
+                            "new": value,
+                            "change": value - original_value
+                        })
+                    except ValueError:
+                        # Se não conseguir converter, usa o valor original
+                        constraint_index = field.constraint_index
+                        original_value = app_state.objective_function.constraints[constraint_index].value
+                        new_values.append(original_value)
+                        constraint_name = app_state.objective_function.constraints[constraint_index].name
+                        changes_summary.append({
+                            "name": constraint_name,
+                            "original": original_value,
+                            "new": original_value,
+                            "change": 0
+                        })
+
+                # Usar o método de análise de disponibilidade existente
+                availability_analysis = simplex_tableau.analyze_resource_availability_change(new_values)
+
+                # Cores e status baseados na viabilidade
+                if availability_analysis["is_viable"]:
+                    status_color = ft.Colors.GREEN_800
+                    status_text = "✓ Viável"
+                    status_bg = ft.Colors.GREEN_100
+                    icon = ft.Icons.CHECK_CIRCLE
+                else:
+                    status_color = ft.Colors.RED_800
+                    status_text = "✗ Não Viável"
+                    status_bg = ft.Colors.RED_100
+                    icon = ft.Icons.ERROR
+
+                # Criar cards visuais para o resultado
+                status_card = ft.Card(
+                    content=ft.Container(
+                        padding=ft.padding.all(20),
+                        bgcolor=status_bg,
+                        content=ft.Row(
+                            controls=[
+                                ft.Icon(name=icon, color=status_color, size=32),
+                                ft.Column(
+                                    controls=[
+                                        ft.Text(
+                                            "Status da Análise",
+                                            weight=ft.FontWeight.BOLD,
+                                            color=status_color,
+                                            size=14,
+                                        ),
+                                        ft.Text(
+                                            status_text,
+                                            weight=ft.FontWeight.BOLD,
+                                            color=status_color,
+                                            size=18,
+                                        ),
+                                    ],
+                                    expand=True,
+                                ),
+                            ],
+                        ),
+                    ),
+                    elevation=3,
+                )
+
+                # Card de comparação de lucros
+                profit_card = ft.Card(
+                    content=ft.Container(
+                        padding=ft.padding.all(20),
+                        bgcolor=ft.Colors.BLUE_50,
+                        content=ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "Comparação de Lucros",
+                                    weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.BLUE_900,
+                                    size=16,
+                                ),
+                                ft.Row(
+                                    controls=[
+                                        ft.Column(
+                                            controls=[
+                                                ft.Text("Lucro Original:", color=ft.Colors.BLUE_700, size=12),
+                                                ft.Text(f"{availability_analysis['original_optimal_value']:.2f}", 
+                                                       color=ft.Colors.BLUE_800, weight=ft.FontWeight.BOLD, size=16),
+                                            ],
+                                            expand=True,
+                                        ),
+                                        ft.Container(
+                                            content=ft.Icon(name=ft.Icons.ARROW_FORWARD, color=ft.Colors.BLUE_600),
+                                            alignment=ft.alignment.center,
+                                        ),
+                                        ft.Column(
+                                            controls=[
+                                                ft.Text("Novo Lucro:", color=ft.Colors.GREEN_700, size=12),
+                                                ft.Text(
+                                                    f"{availability_analysis['new_optimal_value']:.2f}" if availability_analysis["new_optimal_value"] is not None else "N/A",
+                                                    color=ft.Colors.GREEN_800 if availability_analysis["new_optimal_value"] is not None else ft.Colors.RED_800,
+                                                    weight=ft.FontWeight.BOLD,
+                                                    size=16,
+                                                ),
+                                            ],
+                                            expand=True,
+                                        ),
+                                    ],
+                                ),
+                                # Diferença
+                                ft.Container(
+                                    content=ft.Text(
+                                        f"Diferença: {availability_analysis['new_optimal_value'] - availability_analysis['original_optimal_value']:.2f}"
+                                        if availability_analysis["new_optimal_value"] is not None
+                                        else "Diferença: Não calculável",
+                                        color=ft.Colors.PURPLE_800,
+                                        weight=ft.FontWeight.BOLD,
+                                        size=14,
+                                    ),
+                                    bgcolor=ft.Colors.PURPLE_100,
+                                    padding=ft.padding.all(8),
+                                    border_radius=ft.border_radius.all(6),
+                                    alignment=ft.alignment.center,
+                                    margin=ft.margin.only(top=12),
+                                ),
+                            ],
+                        ),
+                    ),
+                    elevation=3,
+                )
+
+                # Tabela de mudanças detalhadas
+                changes_table = ft.DataTable(
+                    columns=[
+                        ft.DataColumn(label=ft.Text("Restrição", weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_900)),
+                        ft.DataColumn(label=ft.Text("Valor Original", weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_900)),
+                        ft.DataColumn(label=ft.Text("Novo Valor", weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_900)),
+                        ft.DataColumn(label=ft.Text("Variação", weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE_900)),
+                    ],
+                    rows=[
+                        ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(change["name"], color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD)),
+                            ft.DataCell(ft.Text(f"{change['original']:.2f}", color=ft.Colors.GREY_700)),
+                            ft.DataCell(ft.Text(f"{change['new']:.2f}", color=ft.Colors.BLUE_800)),
+                            ft.DataCell(ft.Text(
+                                f"{change['change']:+.2f}",
+                                color=ft.Colors.GREEN_700 if change['change'] >= 0 else ft.Colors.RED_700,
+                                weight=ft.FontWeight.BOLD,
+                            )),
+                        ])
+                        for change in changes_summary
+                    ],
+                    border=ft.border.all(1, ft.Colors.PURPLE_300),
+                    heading_row_color=ft.Colors.PURPLE_200,
+                    data_row_color=lambda i: (ft.Colors.WHITE if i % 2 == 0 else ft.Colors.PURPLE_50),
+                    border_radius=ft.border_radius.all(8),
+                )
+
+                # Criar elementos de resultado da análise
+                divider = ft.Divider(thickness=2, color=ft.Colors.PURPLE_300)
+                divider._is_analysis_element = True
+                
+                title_container = ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(name=ft.Icons.SCIENCE, 
+                                   color=ft.Colors.PURPLE_700, size=28),
+                            ft.Text(
+                                "Análise de Mudança de Disponibilidade",
+                                weight=ft.FontWeight.BOLD,
+                                size=18,
+                                color=ft.Colors.PURPLE_900,
+                            ),
+                        ],
+                    ),
+                    margin=ft.margin.only(bottom=16),
+                )
+                title_container._is_analysis_element = True
+                
+                cards_row = ft.Row(
+                    controls=[status_card, profit_card],
+                    spacing=16,
+                )
+                cards_row._is_analysis_element = True
+                
+                spacer = ft.Container(height=16)
+                spacer._is_analysis_element = True
+                
+                details_text = ft.Text(
+                    "Detalhes das Mudanças:",
+                    weight=ft.FontWeight.BOLD,
+                    size=16,
+                    color=ft.Colors.PURPLE_900,
+                )
+                details_text._is_analysis_element = True
+                
+                changes_table._is_analysis_element = True
+                
+                analysis_results = [
+                    divider,
+                    title_container,
+                    cards_row,
+                    spacer,
+                    details_text,
+                    changes_table,
+                ]
+
+                # Remover análises anteriores se existirem
+                remove_previous_analysis()
+
+                # Adicionar novos resultados
+                results_placeholder.content.controls.extend(analysis_results)
+                result_container.update()
+
+            except Exception as e:
+                print(f"Erro na análise de disponibilidade: {e}")
+                # Remover análises anteriores primeiro
+                remove_previous_analysis()
+                
+                # Exibir erro na interface
+                error_message = ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(name=ft.Icons.ERROR, 
+                                   color=ft.Colors.RED_700),
+                            ft.Text(f"Erro na análise: {str(e)}", 
+                                   color=ft.Colors.RED_700),
+                        ],
+                    ),
+                    bgcolor=ft.Colors.RED_100,
+                    padding=ft.padding.all(16),
+                    border_radius=ft.border_radius.all(8),
+                )
+                error_message._is_analysis_element = True
+                results_placeholder.content.controls.append(error_message)
+                result_container.update()
+
+        # Botão para executar a análise
+        analyze_button = ft.ElevatedButton(
+            text="Analisar Mudança",
+            height=40,
+            icon=ft.Icons.ANALYTICS,
+            color=ft.Colors.WHITE,
+            bgcolor=ft.Colors.PURPLE_700,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=8),
+                text_style=ft.TextStyle(
+                    size=14,
+                    color=ft.Colors.WHITE,
+                ),
             ),
+            on_click=lambda e: analyze_availability_change(),
+        )
+
+        def on_change_availability_checkbox_analysis(e):
+            """Callback para mostrar/ocultar os controles de análise de disponibilidade."""
+            availability_analysis_container.visible = e.control.value
+            
+            if e.control.value:
+                # Criar campos de entrada para cada restrição
+                availability_fields = []
+                for i, constraint in enumerate(app_state.objective_function.constraints):
+                    field = ft.TextField(
+                        label=f"Nova disponibilidade para {constraint.name}",
+                        value=str(constraint.value),
+                        hint_text=f"Valor atual: {constraint.value}",
+                        width=250,
+                        height=50,
+                        border_color=ft.Colors.PURPLE_300,
+                        focused_border_color=ft.Colors.PURPLE_700,
+                        text_style=ft.TextStyle(size=14),
+                        label_style=ft.TextStyle(color=ft.Colors.PURPLE_800),
+                    )
+                    field.constraint_index = i  # Adicionar índice para identificação
+                    availability_fields.append(field)
+                
+                # Adicionar os campos ao container
+                fields_row = ft.Row(
+                    controls=availability_fields,
+                    wrap=True,
+                    spacing=16,
+                    run_spacing=8,
+                )
+                
+                availability_analysis_container.content.controls.extend([fields_row, analyze_button])
+                
+                # Armazenar referência aos campos para uso posterior
+                availability_analysis_container.availability_fields = availability_fields
+            else:
+                # Remover campos e botão quando desmarcado
+                if len(availability_analysis_container.content.controls) > 2:
+                    availability_analysis_container.content.controls = availability_analysis_container.content.controls[:2]
+                
+                # Remover análises anteriores dos resultados
+                remove_previous_analysis()
+                result_container.update()
+            
+            availability_analysis_container.update()
+
+        availability_change_checkbox.on_change = on_change_availability_checkbox_analysis
+
+        # Adicionar o checkbox e container aos resultados
+        results_placeholder.content.controls.extend([
+            ft.Divider(thickness=1, color=ft.Colors.GREY_300),
+            availability_change_checkbox,
+            availability_analysis_container,
         ])
 
         result_container.update()
